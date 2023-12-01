@@ -7,8 +7,8 @@ pub fn first_and_last_digit(s: &str) -> u32 {
     return digits.first().unwrap() * 10 + digits.last().unwrap();
 }
 
-pub fn digits() -> &'static [(&'static str, u32); 18] {
-    return &[("one", 1),
+static DIGITS: [(&str, u32); 18] = 
+    [("one", 1),
     ("two", 2),
     ("three", 3),
     ("four", 4),
@@ -27,14 +27,13 @@ pub fn digits() -> &'static [(&'static str, u32); 18] {
     ("8", 8),
     ("9", 9),
     ];
-}
 
 pub fn first_and_last_digit_with_letters(s: &str) -> u32 {
-    let first = digits().iter()
+    let first = DIGITS.iter()
         .filter_map(|(digit, val)| s.find(digit).map(|p| (p, *val)))
         .min_by_key(|x| x.0)
         .unwrap().1;
-    let last = digits().iter()
+    let last = DIGITS.iter()
         .filter_map(|(digit, val)| s.rfind(digit).map(|p| (p, *val)))
         .max_by_key(|x| x.0)
         .unwrap().1;
