@@ -14,7 +14,19 @@ pub fn compute_1(input: Vec<Game>) -> i32 {
 }
 
 pub fn compute_2(input: Vec<Game>) -> i32 {
-    return todo!();
+    fn fewest_cubes(g: Game) -> Subset {
+        let mut result = Subset { red: 0, green: 0, blue: 0 };
+        for s in g.subsets {
+            result.red = s.red.max(result.red);
+            result.green = s.green.max(result.green);
+            result.blue = s.blue.max(result.blue);
+        }
+        return result;
+    }
+    fn power(s: Subset) -> i32 {
+        return s.red * s.blue * s.green;
+    }
+    return input.into_iter().map(fewest_cubes).map(power).sum();
 }
 
 pub struct Game {
@@ -38,9 +50,9 @@ impl FromStr for Game {
 }
 
 pub struct Subset {
-    red: u32,
-    green: u32,
-    blue: u32,
+    red: i32,
+    green: i32,
+    blue: i32,
 }
 
 impl FromStr for Subset {
@@ -99,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        assert_eq!(compute_2(parse(INPUT)), 2286);
     }
 }
 
