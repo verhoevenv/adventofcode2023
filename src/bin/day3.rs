@@ -18,15 +18,9 @@ pub fn compute_1(input: REPR) -> i32 {
         let mut col_idx = 0;
         while col_idx < input.cols {
             if input[(row_idx, col_idx)].is_numeric() {
-                let mut num = input[(row_idx, col_idx)].to_digit(10).unwrap();
-                let col_num_start = col_idx;
-                col_idx += 1;
-                while col_idx < input.cols && input[(row_idx, col_idx)].is_numeric() {
-                    num *= 10;
-                    num += input[(row_idx, col_idx)].to_digit(10).unwrap();
-                    col_idx += 1;
-                }
-
+                let (num, col_num_start, to) = parse_num(&input, (row_idx, col_idx));
+                col_idx = to;
+                
                 let mut symbol_found = false;
                 let scan_from = if col_num_start == 0 { 0 } else { col_num_start - 1 };
                 let scan_to = if col_idx == input.cols { col_idx - 1 } else { col_idx };
@@ -64,7 +58,79 @@ pub fn compute_1(input: REPR) -> i32 {
 }
 
 pub fn compute_2(input: REPR) -> i32 {
-    todo!();
+    let mut sum: u32 = 0;
+
+    let mut row_idx = 0;
+    while row_idx < input.rows {
+        let mut col_idx = 0;
+        while col_idx < input.cols {
+            if input[(row_idx, col_idx)] == '*' {
+                let scan_from = if col_idx == 0 { 0 } else { col_idx - 1 };
+                let scan_to = if col_idx == input.cols { col_idx } else { col_idx + 1};
+
+                let mut nums_found = vec![];
+                if row_idx != 0 {
+                    let mut scan_col = scan_from;
+                    while scan_col <= scan_to {
+                        if input[(row_idx - 1, scan_col)].is_numeric() {
+                            let (num, _, to) = parse_num(&input, (row_idx - 1, scan_col));
+                            scan_col = to;
+                            nums_found.push(num);
+                        }
+                        scan_col += 1;
+                    }
+                }
+                if input[(row_idx, scan_from)].is_numeric() {
+                    let (num, _, _) = parse_num(&input, (row_idx, scan_from));
+                    nums_found.push(num);
+                }
+                if input[(row_idx, scan_to)].is_numeric() {
+                    let (num, _, _) = parse_num(&input, (row_idx, scan_to));
+                    nums_found.push(num);
+                }
+                if row_idx != input.rows - 1 {
+                    let mut scan_col = scan_from;
+                    while scan_col <= scan_to {
+                        if input[(row_idx + 1, scan_col)].is_numeric() {
+                            let (num, _, to) = parse_num(&input, (row_idx + 1, scan_col));
+                            scan_col = to;
+                            nums_found.push(num);
+                        }
+                        scan_col += 1;
+                    }
+                }
+
+                if nums_found.len() == 2 {
+                    sum = sum + (nums_found[0] * nums_found[1]);
+                }
+            }
+            col_idx += 1;
+        }
+        row_idx += 1;
+    }
+
+    return sum.try_into().unwrap();
+}
+
+fn parse_num(arr: &Arr2D<char>, pos: (usize, usize)) -> (u32, usize, usize) {
+    let row_idx = pos.0;
+    let mut col_idx: usize = pos.1;
+
+    while col_idx > 0 && arr[(row_idx, col_idx - 1)].is_numeric() {
+        col_idx -= 1;
+    }
+
+    let col_num_start = col_idx;
+    let mut num = arr[(row_idx, col_idx)].to_digit(10).unwrap();
+
+    col_idx += 1;
+    while col_idx < arr.cols && arr[(row_idx, col_idx)].is_numeric() {
+        num *= 10;
+        num += arr[(row_idx, col_idx)].to_digit(10).unwrap();
+        col_idx += 1;
+    }
+
+    return (num, col_num_start, col_idx);
 }
 
 pub struct Arr2D<T> {
@@ -146,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        assert_eq!(compute_2(parse(INPUT)), 467835);
     }
 }
 
