@@ -7,35 +7,47 @@ use std::collections::HashSet;
 type REPR = Vec<Card>;
 
 pub struct Card {
-    id: i32,
     winning: Vec<i32>,
     have: Vec<i32>,
+}
+
+impl Card {
+    fn num_matches(&self) -> u32 {
+        let win_set = HashSet::<_>::from_iter(&self.winning);
+        let have_set = HashSet::<_>::from_iter(&self.have);
+        return win_set.intersection(&have_set).count().try_into().unwrap();
+    }
 }
 
 pub fn compute_1(input: REPR) -> i32 {
     return input.into_iter()
     .map(|c| {
-        let win_set = HashSet::<_>::from_iter(c.winning);
-        let have_set = HashSet::<_>::from_iter(c.have);
-        let num_matches: u32 = win_set.intersection(&have_set).count().try_into().unwrap();
-        if num_matches == 0 {0} else {2_i32.pow(num_matches - 1)}
+        let num_matches = c.num_matches();
+        if c.num_matches() == 0 {0} else {2_i32.pow(num_matches - 1)}
     })
     .sum();
 }
 
 pub fn compute_2(input: REPR) -> i32 {
-    todo!();
+    let wins_per_card: Vec<_> = input.into_iter().map(|c| c.num_matches()).collect();
+    let mut amounts_per_card = vec![1; wins_per_card.len()];
+    for (processed_card, wins) in wins_per_card.iter().enumerate() {
+        for win in 1..=*wins {
+            let copied_card: usize = (processed_card as u32 + win) as usize;
+            amounts_per_card[copied_card] += amounts_per_card[processed_card];
+        }
+    }
+    return amounts_per_card.iter().sum();
 }
 
 pub fn parse(input: &str) -> REPR {
     return input.lines()
          .map(|l| {
-            let (a, b) = l.split_once(": ").unwrap();
-            let id: i32 = a["Card".len()..].trim().parse().unwrap();
+            let (_, b) = l.split_once(": ").unwrap();
             let (win_str, have_str) = b.split_once(" | ").unwrap();
             let winning: Vec<i32> = win_str.split(" ").filter_map(|n| n.parse().ok()).collect();
             let have: Vec<i32> = have_str.split(" ").filter_map(|n| n.parse().ok()).collect();
-            Card { id, winning, have }
+            Card { winning, have }
             })
          .collect();
 }
@@ -65,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        assert_eq!(compute_2(parse(INPUT)), 30);
     }
 }
 
