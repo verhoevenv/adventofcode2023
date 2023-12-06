@@ -46,7 +46,19 @@ pub fn compute_1(input: REPR) -> u64 {
 }
 
 pub fn compute_2(input: REPR) -> u64 {
-    todo!();
+    let race = input.into_iter().reduce(|acc, e| {
+        Race {
+            time: append(acc.time, e.time),
+            distance: append(acc.distance, e.distance),
+        }
+    }).unwrap();
+    let (from, to) = race.win_points();
+    return to - from + 1;
+}
+
+pub fn append(a: u64, b: u64) -> u64 {
+    let num_digits_b = ((b as f64).log10() + 1.0) as u32;
+    return a * 10_u64.pow(num_digits_b) + b;
 }
 
 pub fn parse(input: &str) -> REPR {
@@ -75,17 +87,17 @@ mod tests {
         assert_eq!(Race{time: 7, distance: 9}.win_points(), (2, 5));
         assert_eq!(Race{time: 15, distance: 40}.win_points(), (4, 11));
         assert_eq!(Race{time: 30, distance: 200}.win_points(), (11, 19));
+        assert_eq!(Race{time: 71530, distance: 940200}.win_points(), (14, 71516));
     }
 
     #[test]
     fn test_part1() {
-        assert_eq!(Race{time: 7, distance: 9}.win_points(), (2, 5));
         assert_eq!(compute_1(parse(INPUT)), 288);
     }
 
     #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        assert_eq!(compute_2(parse(INPUT)), 71503);
     }
 }
 
