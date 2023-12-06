@@ -1,4 +1,5 @@
 use std::io;
+use std::convert::identity;
 use std::io::Read;
 use std::fmt::Display;
 
@@ -12,70 +13,147 @@ type REPR = Almanac;
 
 pub struct Almanac {
     seeds: Vec<u64>,
+    seeds_as_ranges: Vec<Range>,
     maps: Vec<ConversionMap>,
 }
 
 impl Almanac {
-    fn conversion_for(&self, t: &TypeId) -> Option<&ConversionMap> {
-        self.maps.iter().find(|&m| m.from == t.step)
+    fn conversion_for(&self, step: &str) -> Option<&ConversionMap> {
+        self.maps.iter().find(|&m| m.from == step)
     }
 
-    fn convert<'a>(&'a self, t: TypeId<'a>) -> TypeId {
+    fn convert<'a>(&'a self, t: TypeRange<'a>) -> TypeRange {
         let mut result = t;
-        while let Some(conversion) = self.conversion_for(&result) {
+        while let Some(conversion) = self.conversion_for(result.step) {
             result = conversion.map(result);
         }
         return result;
     }
 
     fn convert_seed(&self, seed_num: u64) -> u64 {
-        let location = self.convert(TypeId { step: "seed", num: seed_num });
+        let location = self.convert(TypeRange { step: "seed", ranges: vec![Range::new(seed_num, 1)] });
         assert_eq!(location.step, "location");
-        return location.num;
+        assert_eq!(location.ranges.len(), 1);
+        let location = &location.ranges[0];
+        assert_eq!(location.length, 1);
+        return location.start;
+    }
+
+    fn convert_seed_range(&self, seed_range: Range) -> Vec<Range> {
+        let start = TypeRange { step: "seed", ranges: vec![seed_range] };
+        let result = self.convert(start);
+        return result.ranges;
     }
 }
 
 pub struct ConversionMap {
     from: String,
     to: String,
-    ranges: Vec<Range>,
+    ranges: Vec<RangeMap>,
 }
 
 impl ConversionMap {
-    fn map(&self, t: TypeId) -> TypeId {
-        assert_eq!(self.from, t.step);
+    fn map(&self, input: TypeRange) -> TypeRange {
+        assert!(input.step == self.from);
 
-        let original = t.num;
-        let mapped = self.ranges.iter().find_map(|r| r.map(original));
-
-        let corresponding = mapped.unwrap_or(original);
-
-        TypeId { 
+        let mut input_ranges = input.ranges.clone();
+        let mut result_ranges = Vec::new();
+        for map in &self.ranges {
+            let mut unhandled_ranges = Vec::new();
+            for range in input_ranges {
+                let (handled, unhandled) = map.map(range);
+                for r in handled {
+                    result_ranges.push(r);
+                }
+                for r in unhandled {
+                    unhandled_ranges.push(r);
+                }    
+            };
+            input_ranges = unhandled_ranges;
+        }
+        for r in input_ranges {
+            result_ranges.push(r);
+        }
+        
+        TypeRange {
             step: &self.to,
-             num: corresponding
+            ranges: result_ranges
         }
     }
 }
 
+pub struct RangeMap {
+    offset: i64,
+    src: Range,
+}
+
+impl RangeMap {
+    fn map(&self, range: Range) -> (Vec<Range>, Vec<Range>) {
+        let (before, to_map, after) = self.src.split(range);
+
+        let mapped = to_map.map(|r| Range::new(
+            (r.start as i64 + self.offset) as u64,
+            r.length
+        ));
+
+        let handled = vec![mapped].into_iter().filter_map(identity).collect();
+        let unhandled = vec![before, after].into_iter().filter_map(identity).collect();
+        return (handled, unhandled);
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct Range {
-    dest_start: u64,
-    src_start: u64,
+    start: u64,
     length: u64,
+    end: u64,
 }
 
 impl Range {
-    fn map(&self, num: u64) -> Option<u64> {
-        if num >= self.src_start && num - self.src_start <= self.length  {
-            return Some(num - self.src_start + self.dest_start);
-        } else {
-            return None;
+    fn new(start: u64, length: u64) -> Range {
+        assert!(length > 0);
+        Range {
+            start,
+            length,
+            end: start + length
         }
+    }
+
+    fn end(&self) -> u64 {
+        return self.start + self.length;
+    }
+
+    fn split(&self, to_split: Range) -> (Option<Range>, Option<Range>, Option<Range>) {
+        let before = if to_split.start >= self.start {
+             None
+        } else {
+            Some(Range::new(to_split.start, (self.start-to_split.start).min(to_split.length)))
+        };
+
+        let intersect_from = to_split.start.max(self.start);
+        let intersect_to = to_split.end().min(self.end());
+        let intersect = if intersect_from < intersect_to {
+            Some(Range::new(intersect_from, intersect_to-intersect_from))
+        } else {
+            None
+        };
+
+        let after = if to_split.end() <= self.end() {
+            None
+        } else {
+            let start = self.end().max(to_split.start);
+            let length = to_split.end() - start;
+            assert!(length > 0, "{:?} {:?}", self, to_split);
+            Some(Range::new(start, length))
+        };
+       
+        return (before, intersect, after);
     }
 }
 
-struct TypeId<'a> {
+struct TypeRange<'a> {
     step: &'a str,
-    num: u64,
+    ranges: Vec<Range>,
 }
 
 pub fn compute_1(input: REPR) -> u64 {
@@ -85,11 +163,14 @@ pub fn compute_1(input: REPR) -> u64 {
 }
 
 pub fn compute_2(input: REPR) -> u64 {
-    todo!();
+    input.seeds_as_ranges.iter()
+    .flat_map( |r| input.convert_seed_range(*r))
+    .map(|r| r.start)
+    .min().unwrap()
 }
 
 pub fn parse(input: &str) -> REPR {
-    fn range(i: &str) -> IResult<&str, Range> {
+    fn range(i: &str) -> IResult<&str, RangeMap> {
         let (i, (dest_start, _, src_start, _,  length)) = tuple((
             num,
             tag(" "),
@@ -97,7 +178,8 @@ pub fn parse(input: &str) -> REPR {
             tag(" "),
             num,
         ))(i)?;
-        Ok((i, Range { dest_start, src_start, length }))
+        let offset = dest_start as i64 - src_start as i64;
+        Ok((i, RangeMap { offset, src: Range::new(src_start, length) }))
     }
 
     fn conversion_map(i: &str) -> IResult<&str, ConversionMap> {
@@ -142,7 +224,11 @@ pub fn parse(input: &str) -> REPR {
         )(i)?;
         let (i, _) = tag("\n")(i)?;
 
-        Ok((i, Almanac { seeds, maps } ))
+        let seeds_as_ranges = seeds.chunks(2)
+                                .map(|x| Range::new(x[0], x[1]))
+                                .collect();
+
+        Ok((i, Almanac { seeds, seeds_as_ranges, maps } ))
     }
 
     let (rest, result) = all(input).unwrap();
@@ -208,8 +294,32 @@ mod tests {
     }
 
     #[test]
+    fn test_split() {
+        let r1 = Range::new(1, 10);
+        let r2 = Range::new(2, 2);
+        let r3 = Range::new(1, 1);
+        let r4 = Range::new(4, 7);
+        let r5 = Range::new(37, 7);
+        assert_eq!(r1.split(r2), (None, Some(r2), None));
+        assert_eq!(r2.split(r1), (Some(r3), Some(r2), Some(r4)));
+        assert_eq!(r5.split(r1), (Some(r1), None, None));
+        assert_eq!(r1.split(r5), (None, None, Some(r5)));
+    }
+
+    #[test]
+    fn test_map() {
+        let almanac = parse(INPUT);
+        let map = almanac.conversion_for("seed").unwrap();
+        let start_seed = Range::new(79, 1);
+        let result = map.map(TypeRange { step: "seed", ranges: vec![start_seed] });
+
+        assert_eq!(result.step, "soil");
+        assert_eq!(result.ranges, vec![Range::new(81, 1)]);
+    }
+
+    #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        assert_eq!(compute_2(parse(INPUT)), 46);
     }
 }
 
