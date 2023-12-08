@@ -5,6 +5,8 @@ use std::fmt::Display;
 
 use regex::Regex;
 
+use num::integer::lcm;
+
 type REPR = (Instructions, Network);
 
 pub struct Instructions(Vec<char>);
@@ -18,14 +20,14 @@ pub struct Network {
 pub struct Element(String);
 
 
-pub fn compute_1(input: REPR) -> u64 {
+pub fn steps_from_to(input: &REPR, from: &Element, goal_reached: fn(&Element) -> bool) -> u64 {
     let mut steps = 0;
-    let mut current_element = &Element("AAA".to_owned());
-    let instructions = input.0.0;
+    let mut current_element = from;
+    let instructions = &input.0.0;
 
-    while *current_element != Element("ZZZ".to_owned()) {
+    while !goal_reached(current_element) {
         steps += &instructions.len();
-        for instr in &instructions {
+        for instr in instructions {
             let (l, r) = input.1.nodes.get(&current_element).unwrap();
             match instr {
                 'L' => current_element = l,
@@ -38,12 +40,22 @@ pub fn compute_1(input: REPR) -> u64 {
     return steps as u64;
 }
 
+pub fn compute_1(input: REPR) -> u64 {
+    return steps_from_to(&input, &Element("AAA".to_owned()), |e| *e == Element("ZZZ".to_owned()));
+}
+
 pub fn compute_2(input: REPR) -> u64 {
-    todo!();
+    let starting_elements: Vec<&Element> = input.1.nodes.keys().filter(|e| e.0.ends_with("A")).collect();
+    let steps_needed: Vec<u64> = starting_elements.into_iter()
+        .map(|start| steps_from_to(&input, start, |e| e.0.ends_with("Z")))
+        .collect();
+
+    let lcm = steps_needed.into_iter().reduce(|a, b| lcm(a, b)).unwrap();
+    return lcm as u64;
 }
 
 pub fn parse(input: &str) -> REPR {
-    let node_re: Regex = Regex::new(r"^([A-Z]+) = \(([A-Z]+), ([A-Z]+)\)$").unwrap();
+    let node_re: Regex = Regex::new(r"^([A-Z1-9]+) = \(([A-Z1-9]+), ([A-Z1-9]+)\)$").unwrap();
     let lines: Vec<&str> = input.lines().collect();
 
     let instructions: Vec<char> = lines[0].chars().collect();
@@ -72,7 +84,7 @@ mod tests {
     use super::*;
     use indoc::indoc;
 
-    const INPUT: &str = indoc! {"
+    const INPUT1: &str = indoc! {"
         LLR
 
         AAA = (BBB, BBB)
@@ -82,12 +94,25 @@ mod tests {
 
     #[test]
     fn test_part1() {
-        assert_eq!(compute_1(parse(INPUT)), 6);
+        assert_eq!(compute_1(parse(INPUT1)), 6);
     }
+
+    const INPUT2: &str = indoc! {"
+        LR
+
+        11A = (11B, XXX)
+        11B = (XXX, 11Z)
+        11Z = (11B, XXX)
+        22A = (22B, XXX)
+        22B = (22C, 22C)
+        22C = (22Z, 22Z)
+        22Z = (22B, 22B)
+        XXX = (XXX, XXX)
+    "};
 
     #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        assert_eq!(compute_2(parse(INPUT2)), 6);
     }
 }
 
