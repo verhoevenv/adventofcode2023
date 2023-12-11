@@ -38,8 +38,22 @@ pub fn compute_1(input: REPR) -> i64 {
 }
 
 pub fn compute_2(input: REPR) -> i64 {
-    todo!();
-}
+    let mut sum = 0;
+    for s in input {
+        let mut diffs = vec![s];
+        while !diffs.last().unwrap().is_zeroes() {
+            diffs.push(diffs.last().unwrap().diffs());
+        }
+
+        let mut next_val = 0;
+        for diff in diffs.into_iter().rev() {
+            next_val = diff.0.first().unwrap() - next_val;
+        }
+
+        sum += next_val;
+    }
+    
+    return sum;}
 
 pub fn parse(input: &str) -> REPR {
     return input.lines()
@@ -70,7 +84,7 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        assert_eq!(compute_2(parse(INPUT)), 2);
     }
 }
 
