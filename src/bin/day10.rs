@@ -1,4 +1,5 @@
-use std::fmt::Display;
+use std::convert::identity;
+use std::fmt::{Display, Formatter, Write};
 use std::io;
 use std::io::Read;
 use std::ops::{Index, IndexMut};
@@ -43,14 +44,14 @@ impl Pipes {
         }
     }
 
-    fn steps_in_loop(&self, start_is: PipeDir) -> u64 {
-        let mut steps = 0;
+    fn make_loop(&self, start_is: PipeDir) -> Vec<(Position, PipeDir)> {
+        let mut result = vec![];
         let mut position = self.start;
-        let mut going_to = start_is.connects().0;
+        result.push((position, start_is));
+        let mut going_to = start_is.connects()[0];
 
         loop {
             position = going_to.apply(&position).unwrap();
-            steps += 1;
 
             if !self.map.is_valid_position(position) {
                 panic!("The beast escaped! (pos = {:?})", position);
@@ -59,10 +60,12 @@ impl Pipes {
                 panic!("The loop broke! (pos = {:?})", position);
             }
             if position == self.start {
-                return steps;
+                return result;
             }
 
-            going_to = self.map[position].other_side(&going_to).unwrap();
+            let pipe = self.map[position];
+            result.push((position, pipe));
+            going_to = pipe.other_side(&going_to).unwrap();
         }
 
     }
@@ -110,14 +113,14 @@ impl PipeDir {
         }
     }
 
-    pub fn connects(&self) -> (Direction, Direction) {
+    pub fn connects(&self) -> [Direction; 2] {
         return match self {
-            NS => (North, South),
-            EW => (East, West),
-            NE => (North, East),
-            NW => (North, West),
-            SW => (South, West),
-            SE => (South, East),
+            NS => [North, South],
+            EW => [East, West],
+            NE => [North, East],
+            NW => [North, West],
+            SW => [South, West],
+            SE => [South, East],
             _ => panic!("no directions for {:?}", self),
         }
     }
@@ -143,12 +146,37 @@ impl PipeDir {
 
 pub fn compute_1(input: REPR) -> u64 {
     let start_pipe = input.match_start();
-    let x = input.steps_in_loop(start_pipe);
-    return x / 2;
+    let num_steps = input.make_loop(start_pipe).len();
+    return (num_steps as u64) / 2;
 }
 
 pub fn compute_2(input: REPR) -> u64 {
-    todo!();
+    let start_pipe = input.match_start();
+    let the_loop = input.make_loop(start_pipe);
+
+    let mut high_res = Arr2D::new(' ', input.map.rows * 3, input.map.cols * 3);
+    for ((x, y), pipe) in the_loop {
+        let center = (x*3 + 1, y*3 + 1);
+        high_res[(x*3 + 1, y*3 + 1)] = 'X';
+        for dir in pipe.connects() {
+            let side = dir.apply(&center).unwrap();
+            high_res[side] = 'X';
+        }
+    }
+
+    let starting_point = (0,0);
+    high_res.flood_fill(starting_point, 'O', 'X');
+
+    let mut num_inside = 0;
+    for row in 0..input.map.rows {
+        for col in 0..input.map.cols {
+            if high_res[(row * 3 + 1, col * 3 + 1)] == ' ' {
+                num_inside += 1;
+            }
+        }
+    }
+
+    return num_inside;
 }
 
 pub fn parse(input: &str) -> REPR {
@@ -179,6 +207,20 @@ pub struct Arr2D<T> {
     arr: Vec<T>,
 }
 
+impl<T: Eq + Copy> Arr2D<T> {
+    fn flood_fill(&mut self, start_point: (usize, usize), fill_with: T, wall: T) {
+        let mut to_fill = vec![start_point];
+        while let Some(pos) = to_fill.pop() {
+            if self[pos] != wall && self[pos] != fill_with {
+                self[pos] = fill_with;
+                for neighbour in self.neighbours(pos).into_iter().filter_map(identity) {
+                    to_fill.push(neighbour);
+                }
+            }
+        }
+    }
+}
+
 impl<T: Clone> Arr2D<T> {
     fn new(elem: T, rows: usize, cols: usize) -> Self {
         Arr2D {
@@ -189,7 +231,13 @@ impl<T: Clone> Arr2D<T> {
     }
 
     fn is_valid_position(&self, pos: (usize, usize)) -> bool {
-        pos.0 < self.cols && pos.1 < self.rows
+        pos.0 < self.rows && pos.1 < self.cols
+    }
+
+    fn neighbours(&self, pos: (usize, usize)) -> [Option<(usize, usize)>; 4] {
+        [North, East, South, West]
+            .map(|d| d.apply(&pos))
+            .map(|d| d.filter(|&p| self.is_valid_position(p)))
     }
 }
 
@@ -213,6 +261,19 @@ impl<T> IndexMut<(usize, usize)> for Arr2D<T> {
     }
 }
 
+impl Display for Arr2D<char> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for row in 0..self.rows {
+            for col in 0..self.cols {
+                let x = self[(row, col)];
+                f.write_char(x)?;
+            }
+            f.write_char('\n')?;
+        }
+        Ok(())
+    }
+}
+
 fn main() {
     read_and_write(parse, &[compute_1, compute_2]);
 }
@@ -223,7 +284,7 @@ mod tests {
 
     use super::*;
 
-    const INPUT: &str = indoc! {"
+    const INPUT1: &str = indoc! {"
         7-F7-
         .FJ|7
         SJLL7
@@ -233,12 +294,51 @@ mod tests {
 
     #[test]
     fn test_part1() {
-        assert_eq!(compute_1(parse(INPUT)), 8);
+        assert_eq!(compute_1(parse(INPUT1)), 8);
     }
+
+    const INPUT2_1: &str = indoc! {"
+        ...........
+        .S-------7.
+        .|F-----7|.
+        .||.....||.
+        .||.....||.
+        .|L-7.F-J|.
+        .|..|.|..|.
+        .L--J.L--J.
+        ...........
+    "};
+
+    const INPUT2_2: &str = indoc! {"
+        ..........
+        .S------7.
+        .|F----7|.
+        .||....||.
+        .||....||.
+        .|L-7F-J|.
+        .|..||..|.
+        .L--JL--J.
+        ..........
+    "};
+
+    const INPUT2_3: &str = indoc! {"
+        FF7FSF7F7F7F7F7F---7
+        L|LJ||||||||||||F--J
+        FL-7LJLJ||||||LJL-77
+        F--JF--7||LJLJ7F7FJ-
+        L---JF-JLJ.||-FJLJJ7
+        |F|F-JF---7F7-L7L|7|
+        |FFJF7L7F-JF7|JL---7
+        7-L-JL7||F7|L7F-7F7|
+        L.L7LFJ|||||FJL7||LJ
+        L7JLJL-JLJLJL--JLJ.L
+    "};
 
     #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        assert_eq!(compute_2(parse(INPUT2_1)), 4);
+        assert_eq!(compute_2(parse(INPUT2_2)), 4);
+        assert_eq!(compute_2(parse(INPUT2_3)), 10);
     }
 }
 
