@@ -8,7 +8,7 @@ type REPR = Universe;
 pub struct Universe(Vec<Galaxy>);
 
 impl Universe {
-    pub fn inflate(&self) -> Self {
+    pub fn inflate(&self, amount: i64) -> Self {
         let max_x = self.0.iter().map(|g| g.coordinates.x).max().unwrap();
         let max_y = self.0.iter().map(|g| g.coordinates.y).max().unwrap();
 
@@ -18,7 +18,7 @@ impl Universe {
             if self.0.iter().all(|g| g.coordinates.x != x) {
                 for g_idx in 0..self.0.len() {
                     if self.0[g_idx].coordinates.x > x {
-                        new_universe.0[g_idx].coordinates.x += 1;
+                        new_universe.0[g_idx].coordinates.x += amount - 1;
                     }
                 }
             }
@@ -27,13 +27,23 @@ impl Universe {
             if self.0.iter().all(|g| g.coordinates.y != y) {
                 for g_idx in 0..self.0.len() {
                     if self.0[g_idx].coordinates.y > y {
-                        new_universe.0[g_idx].coordinates.y += 1;
+                        new_universe.0[g_idx].coordinates.y += amount - 1;
                     }
                 }
             }
         }
 
         return new_universe;
+    }
+
+    pub fn sum_of_distances(&self) -> i64 {
+        let mut sum = 0;
+        for (g1_idx, g1) in self.0.iter().enumerate() {
+            for g2 in &self.0[g1_idx..] {
+                sum += g1.distance(g2);
+            }
+        }
+        return sum;
     }
 }
 
@@ -52,18 +62,11 @@ impl Galaxy {
 }
 
 pub fn compute_1(input: REPR) -> i64 {
-    let inflated = input.inflate();
-    let mut sum = 0;
-    for (g1_idx, g1) in inflated.0.iter().enumerate() {
-        for g2 in &inflated.0[g1_idx..] {
-            sum += g1.distance(g2);
-        }
-    }
-    return sum;
+    return input.inflate(2).sum_of_distances();
 }
 
 pub fn compute_2(input: REPR) -> i64 {
-    todo!();
+    return input.inflate(1_000_000).sum_of_distances();
 }
 
 pub fn parse(input: &str) -> REPR {
@@ -112,7 +115,10 @@ mod tests {
 
     #[test]
     fn test_part2() {
-        assert_eq!(compute_2(parse(INPUT)), todo!());
+        let universe = parse(INPUT);
+
+        assert_eq!(universe.inflate(10).sum_of_distances(), 1030);
+        assert_eq!(universe.inflate(100).sum_of_distances(), 8410);
     }
 }
 
